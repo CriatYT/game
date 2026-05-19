@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corte de Mentiras</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Rye&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        /* ================= ESTILO GERAL E VARIÁVEIS ================= */
+        :root {
+            --cor-madeira-fundo: #0d0603;
+            --cor-dourado: #d4af37;
+            --cor-dourado-escuro: #8a6d1c;
+            --cor-texto: #fdf5e6;
+            --cor-vermelho-sangue: #660000;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--cor-madeira-fundo);
+            font-family: 'Playfair Display', serif;
+            color: var(--cor-texto);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        h1, h2, h3 {
+            font-family: 'Rye', cursive;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            margin-top: 0;
+        }
+
+        /* ================= MENU (LOBBY) ================= */
+        #lobby-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at center, #2c1208 0%, #0d0603 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .menu-box {
+            background: rgba(15, 5, 0, 0.95);
+            padding: 40px;
+            border: 2px solid var(--cor-dourado-escuro);
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.9), inset 0 0 20px rgba(212, 175, 55, 0.1);
+            width: 450px;
+            max-width: 90%;
+        }
+
+        .menu-box h1 {
+            color: var(--cor-dourado);
+            font-size: 2.8rem;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            color: #aaa;
+            font-style: italic;
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--cor-dourado);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        input {
+            width: 100%;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid var(--cor-dourado-escuro);
+            color: var(--cor-texto);
+            padding: 12px;
+            font-size: 1.2rem;
+            font-family: 'Playfair Display', serif;
+            text-align: center;
+            border-radius: 8px;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
+        }
+
+        input:focus { outline: none; border-color: var(--cor-dourado); box-shadow: 0 0 10px rgba(212, 175, 55, 0.3); }
+
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--cor-dourado-escuro), transparent);
+            margin: 25px 0;
+        }
+
+        .btn {
+            width: 100%;
+            background: linear-gradient(to bottom, #f9d976, #c59b27, #8a6d1c);
+            color: #111;
+            font-weight: bold;
+            border: none;
+            padding: 15px;
+            font-size: 1.2rem;
+            font-family: 'Rye', cursive;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            margin-top: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.4);
+        }
+
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(212, 175, 55, 0.4); filter: brightness(1.1); }
+        .btn:active { transform: translateY(1px); }
+
+        /* ================= GAME CONTAINER E CANVAS ================= */
+        #game-container {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* Previne zoom/scroll indesejado em mobile */
+        }
+
+        /* ================= OVERLAYS DE UI (POR CIMA DO CANVAS) ================= */
+        
+        /* Informações da Sala */
+        #room-info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            border: 1px solid var(--cor-dourado-escuro);
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            color: var(--cor-dourado);
+            pointer-events: none;
+        }
+
+        /* Painel de Ações */
+        #action-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(15, 5, 0, 0.9);
+            border: 2px solid var(--cor-dourado-escuro);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 300px;
+        }
+
+        #action-panel h3 { color: var(--cor-dourado); text-align: center; font-size: 1.2rem; margin-bottom: 10px; }
+
+        .btn-action {
+            background: #2a2a2a;
+            color: var(--cor-texto);
+            border: 1px solid #555;
+            padding: 10px;
+            font-family: 'Playfair Display', serif;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: 0.2s;
+            border-radius: 3px;
+            text-align: left;
+        }
+
+        .btn-action:hover { background: #3a3a3a; border-color: var(--cor-dourado); }
+        .btn-action span { float: right; color: var(--cor-dourado); font-weight: bold; }
+
+        /* Tela de Tensão (Duvidar) */
+        #challenge-overlay {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(20, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        #challenge-text {
+            font-size: 2rem;
+            color: white;
+            text-shadow: 0 0 10px black, 0 0 20px var(--cor-vermelho-sangue);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .btn-danger {
+            background: linear-gradient(to bottom, #8a0303, #4a0000);
+            color: white;
+            font-size: 2.5rem;
+            padding: 20px 60px;
+            border-radius: 10px;
+            border: 2px solid #ff4c4c;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            font-family: 'Rye', cursive;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .btn-danger:hover { transform: scale(1.05); box-shadow: 0 0 40px rgba(255, 0, 0, 0.4); }
+        .btn-danger:active { transform: scale(0.95); }
+
+        #timer { font-size: 5rem; font-family: 'Rye', cursive; color: var(--cor-dourado); margin-top: 20px; }
+
+        /* ================= TOAST NOTIFICATIONS E VICTORY SCREEN ================= */
+        #toast-container {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+        }
+        .toast {
+            background: rgba(0, 0, 0, 0.9); border: 1px solid var(--cor-dourado);
+            color: var(--cor-texto); padding: 10px 20px; border-radius: 5px;
+            font-family: 'Playfair Display', serif; text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5); animation: fadeInOut 3s forwards;
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- ================= MENU COMPLETO ================= -->
+    <div id="lobby-container">
+        <button class="btn-info" onclick="abrirRegras()" style="position:absolute; top: 20px; right: 20px; width: 40px; height: 40px; border-radius: 50%; font-family: 'Rye'; font-size: 1.5rem; background: var(--cor-dourado); color: var(--cor-madeira-fundo); border: none; cursor: pointer; z-index: 1000; box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);">i</button>
+
+        <div id="rules-modal" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
+            <div class="menu-box">
+                <h1>Regras do Submundo</h1>
+                <div style="text-align: left; font-family: 'Playfair Display'; color: #ccc; font-size: 1.1rem; line-height: 1.6; margin-bottom: 20px;">
+                    <p><strong style="color: var(--cor-dourado);">Agiota:</strong> Pega 3 moedas do Banco Central.</p>
+                    <p><strong style="color: var(--cor-vermelho-sangue);">Matador:</strong> Paga 3 moedas para eliminar a carta de um alvo.</p>
+                    <p><strong style="color: #aaa;">Segurança:</strong> Bloqueia uma tentativa de assassinato.</p>
+                    <p><em>Regra de Ouro:</em> Você pode mentir sobre os papéis. Mas se alguém duvidar, a verdade custará uma vida!</p>
+                </div>
+                <button class="btn" onclick="fecharRegras()">Entendi</button>
+            </div>
+        </div>
+
+        <div class="menu-box">
+            <h1>Corte de Mentiras</h1>
+            <div class="subtitle">O submundo não perdoa falhas.</div>
+            
+            <div class="input-group">
+                <label>Seu Vulgo (Apelido)</label>
+                <input type="text" id="playerNameInput" placeholder="Ex: Don Corleone" autocomplete="off">
+            </div>
+
+            <button class="btn" onclick="criarNovaMesa()">Criar Nova Mesa</button>
+
+            <div class="divider"></div>
+
+            <div class="input-group">
+                <label>Código da Mesa Secreta</label>
+                <input type="text" id="roomCodeInput" placeholder="Ex: A7X9" style="text-transform: uppercase;">
+            </div>
+            
+            <button class="btn" onclick="entrarMesaExistente()">Entrar na Mesa</button>
+        </div>
+    </div>
+
+    <!-- ================= SALA DE ESPERA ================= -->
+    <div id="waiting-room-container" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at center, #2c1208 0%, #0d0603 100%); justify-content: center; align-items: center; z-index: 100;">
+        <div class="menu-box">
+            <h1>Sala de Espera</h1>
+            <div class="subtitle">Código Secreto: <span id="waiting-room-code" style="color: var(--cor-dourado); font-weight: bold; font-size: 1.2rem;"></span></div>
+            
+            <ul id="waiting-players-list" style="list-style: none; padding: 0; margin-bottom: 20px; text-align: center; color: var(--cor-texto); font-size: 1.2rem;"></ul>
+
+            <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
+                <button class="btn" style="width: auto; padding: 10px 20px;" onclick="copiarLinkSala()">Copiar Link</button>
+                <button id="btn-start-game" class="btn" style="display: none; width: auto; padding: 10px 20px;" onclick="iniciarPartidaHost()">Iniciar Jogo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= TELA DE JOGO ================= -->
+    <div id="game-container">
+        <!-- O Canvas onde a mágica visual acontece -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- UI Sobreposta (Apenas o que precisa de clique nativo/copiar texto) -->
+        <div id="room-info">
+            SALA: <span id="display-room-code">----</span><br>
+            STATUS: <span style="color:#aaa">Aguardando...</span>
+        </div>
+
+        <div id="action-panel">
+            <h3>Suas Ações</h3>
+            <button class="btn-action" id="btn-pequeno_furto" onclick="enviarAcao('pequeno_furto')">
+                Pequeno Furto <br><small style="font-size: 0.75em; color: #888;">(Livre)</small> <span>+1 🪙</span>
+            </button>
+            <button class="btn-action" id="btn-extorsao" onclick="enviarAcao('extorsao')">
+                Extorsão <br><small style="font-size: 0.75em; color: var(--cor-dourado);">Requer Agiota 🃏</small> <span>+3 🪙</span>
+            </button>
+            <button class="btn-action" id="btn-contrato" onclick="enviarAcao('contrato')">
+                Contrato <br><small style="font-size: 0.75em; color: var(--cor-dourado);">Requer Matador 🃏</small> <span>-3 🪙</span>
+            </button>
+            <button class="btn-action" id="btn-execucao" onclick="enviarAcao('execucao')">
+                A Execução <br><small style="font-size: 0.75em; color: #888;">(Imbloqueável)</small> <span>-7 🪙</span>
+            </button>
+        </div>
+
+        <div id="challenge-overlay">
+            <div id="challenge-text">Renji declarou: <br><span style="color:var(--cor-dourado); font-size:3rem">EXTORSÃO</span></div>
+            <button class="btn-danger" onclick="enviarDuvida()">DUVIDAR!</button>
+            <div id="timer">7</div>
+        </div>
+    </div>
+
+    <!-- ================= TOASTS & VICTORY ================= -->
+    <div id="toast-container"></div>
+    <div id="victory-screen" style="display:none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 300; justify-content: center; align-items: center; flex-direction: column; text-align: center;">
+        <h1 style="color: var(--cor-dourado); font-size: 4rem; text-shadow: 0 0 20px var(--cor-dourado-escuro);">A Família Venceu</h1>
+        <h2 style="color: white; font-size: 2rem; margin-bottom: 40px;">Sobrevivente: <span id="winner-name"></span></h2>
+        <button class="btn" id="btn-voltar-lobby" style="width: auto; padding: 15px 40px; display: none;" onclick="voltarParaLobby()">Voltar para o Lobby</button>
+    </div>
+
+    <!-- ================= LÓGICA E MOTOR DO CANVAS ================= -->
+    <script>
+        // ================= CONFIGURAÇÕES GERAIS E CURSOR HOOKS =================
+        const lobby = document.getElementById('lobby-container');
+        const gameUI = document.getElementById('game-container');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Referências UI
+        let socket;
+        if (typeof io !== 'undefined') {
+            socket = io();
+        } else {
+            alert("⚠️ Erro de Rede: Multiplayer não carregado!\n\nCertifique-se de iniciar o servidor (node server.js) e abrir o jogo pelo endereço: http://localhost:3000\n(Não abra o arquivo HTML com dois cliques diretos).");
+        }
+        const roomCodeDisplay = document.getElementById('display-room-code');
+        const challengeOverlay = document.getElementById('challenge-overlay');
+        const timerDisplay = document.getElementById('timer');
+
+        // Estado do Jogo Visual
+        let cw, ch; // Canvas width/height
+        let animTime = 0;
+        let mouseX = 0;
+        let mouseY = 0;
+        let salaAtual = "";
+
+        // Estado da Partida (Cursor vai popular isso via WebSockets)
+        let gameState = {
+            centralCoins: 15, // Banco central
+            players: []
+        };
+
+        // Capturar posição do mouse no Canvas para interagir com as Cartas
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+
+        // Eventos Touch (Mobile)
+        canvas.addEventListener('touchstart', handleTouch, {passive: false});
+        canvas.addEventListener('touchmove', handleTouch, {passive: false});
+        canvas.addEventListener('touchend', (e) => { e.preventDefault(); mouseX = -1; mouseY = -1; }, {passive: false});
+        
+        function handleTouch(e) {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.touches[0].clientX - rect.left;
+            mouseY = e.touches[0].clientY - rect.top;
+        }
+
+        // Redimensionamento fluido
+        window.addEventListener('resize', resizeCanvas);
+        function resizeCanvas() {
+            cw = canvas.width = window.innerWidth;
+            ch = canvas.height = window.innerHeight;
+        }
+
+        // Captura Código da Sala pela URL se houver
+        window.onload = () => {
+            const params = new URLSearchParams(window.location.search);
+            if(params.has('room')) {
+                document.getElementById('roomCodeInput').value = params.get('room');
+            }
+        };
+
+        function showToast(msg, duration = 3000) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerText = msg;
+            toast.style.animationDuration = duration + 'ms';
+            container.appendChild(toast);
+            setTimeout(() => { if(toast.parentNode) toast.remove(); }, duration);
+        }
+
+        // ================= FUNÇÕES DE INTERAÇÃO UI -> SERVIDOR =================
+
+        function criarNovaMesa() {
+            if (!socket || !socket.connected) {
+                showToast("⚠️ Sem conexão com o servidor! Verifique o terminal onde o Node está rodando.");
+                return;
+            }
+            const nome = document.getElementById('playerNameInput').value || 'Chefe';
+            socket.emit('create_room', { name: nome });
+        }
+
+        function entrarMesaExistente() {
+            if (!socket || !socket.connected) {
+                showToast("⚠️ Sem conexão com o servidor!");
+                return;
+            }
+            const nome = document.getElementById('playerNameInput').value || 'Capanga';
+            const codigo = document.getElementById('roomCodeInput').value.toUpperCase();
+            if(!codigo) { showToast("Digite o código da mesa!"); return; }
+            
+            socket.emit('join_room', { name: nome, code: codigo });
+        }
+
+        function iniciarPartidaHost() {
+            socket.emit('start_game');
+        }
+
+        function abrirRegras() { document.getElementById('rules-modal').style.display = 'flex'; }
+        function fecharRegras() { document.getElementById('rules-modal').style.display = 'none'; }
+
+        function copiarLinkSala() {
+            const url = window.location.origin + window.location.pathname + "?room=" + salaAtual;
+            navigator.clipboard.writeText(url).then(() => showToast("Link da sala copiado!"));
+        }
+
+        socket.on('room_joined', (data) => {
+            lobby.style.display = 'none';
+            document.getElementById('victory-screen').style.display = 'none';
+            gameUI.style.display = 'none';
+            document.getElementById('waiting-room-container').style.display = 'flex';
+            document.getElementById('waiting-room-code').innerText = data.code;
+            salaAtual = data.code;
+            
+            const list = document.getElementById('waiting-players-list');
+            list.innerHTML = '';
+            data.players.forEach(p => {
+                list.innerHTML += `<li style="margin-bottom: 10px;">${p.name} ${p.isHost ? '<span style="color: var(--cor-dourado-escuro); font-size: 0.8em;">(Host)</span>' : ''}</li>`;
+            });
+
+            if (data.hostId === socket.id) {
+                document.getElementById('btn-start-game').style.display = 'block';
+                const btnStart = document.getElementById('btn-start-game');
+                if (data.players.length < 3) {
+                    btnStart.disabled = true; btnStart.style.opacity = '0.5'; btnStart.innerText = 'Aguardando Jogadores...';
+                } else {
+                    btnStart.disabled = false; btnStart.style.opacity = '1'; btnStart.innerText = 'Iniciar Jogo';
+                }
+            }
+        });
+
+        socket.on('error', (msg) => showToast(msg, 4000));
+
+        socket.on('game_started', () => {
+            document.getElementById('waiting-room-container').style.display = 'none';
+            gameUI.style.display = 'block';
+            resizeCanvas();
+            requestAnimationFrame(gameLoop);
+        });
+
+        socket.on('update_state', (state) => {
+            roomCodeDisplay.innerText = state.code;
+            gameState.centralCoins = state.centralCoins;
+            
+            const oldPlayers = gameState.players || [];
+            gameState.players = state.players.map(p => {
+                const oldP = oldPlayers.find(op => op.id === p.id) || {};
+                p.x = oldP.x;
+                p.y = oldP.y;
+                const oldCards = oldP.cards || [];
+                p.cards = p.cards.map(c => {
+                    const oldC = oldCards.find(oc => oc.id === c.id) || {};
+                    return {
+                        ...c,
+                        flipProgress: oldC.flipProgress || 0,
+                        hitbox: oldC.hitbox || null
+                    };
+                });
+                return p;
+            });
+
+            const isMyTurn = (state.currentPlayerId === socket.id);
+            const myPlayer = state.players.find(p => p.isMe);
+            const myCoins = myPlayer ? myPlayer.coins : 0;
+
+            // Validação de Dinheiro e Turno Visual
+            function setBtn(id, enabled) {
+                const btn = document.getElementById(id);
+                btn.disabled = !enabled;
+                btn.style.opacity = enabled ? '1' : '0.4';
+                btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+            }
+
+            setBtn('btn-pequeno_furto', isMyTurn);
+            setBtn('btn-extorsao', isMyTurn);
+            setBtn('btn-contrato', isMyTurn && myCoins >= 3);
+            setBtn('btn-execucao', isMyTurn && myCoins >= 7);
+
+            if (isMyTurn && state.pendingAction === null && window.lastTurn !== state.currentPlayerId) {
+                showToast("Sua vez de agir, faça sua jogada!", 4000);
+            }
+            if(state.pendingAction === null) {
+                window.lastTurn = state.currentPlayerId;
+            }
+
+            if (state.pendingAction && state.pendingAction.playerId !== socket.id) {
+                const actor = state.players.find(p => p.id === state.pendingAction.playerId);
+                const acoesNomes = {
+                    'extorsao': 'EXTORSÃO',
+                    'contrato': 'CONTRATO'
+                };
+                document.getElementById('challenge-text').innerHTML = `${actor.name} declarou:<br><span style='color:var(--cor-dourado); font-size:3rem'>${acoesNomes[state.pendingAction.action] || state.pendingAction.action}</span>`;
+                timerDisplay.innerText = state.pendingAction.timeLeft;
+                challengeOverlay.style.display = 'flex';
+            } else {
+                challengeOverlay.style.display = 'none';
+            }
+        });
+
+        socket.on('game_over', (winnerName) => {
+            document.getElementById('victory-screen').style.display = 'flex';
+            document.getElementById('winner-name').innerText = winnerName;
+            
+            const me = gameState.players.find(p => p.isMe);
+            if (me && me.isHost) {
+                document.getElementById('btn-voltar-lobby').style.display = 'inline-block';
+            } else {
+                document.getElementById('btn-voltar-lobby').style.display = 'none';
+            }
+        });
+
+        function enviarAcao(tipoAcao) {
+            socket.emit('player_action', { action: tipoAcao });
+            const todosBotoes = document.querySelectorAll('.btn-action');
+            todosBotoes.forEach(btn => {
+                btn.disabled = true;
+                btn.style.opacity = '0.4';
+                btn.style.cursor = 'not-allowed';
+            });
+        }
+
+        function enviarDuvida() {
+            challengeOverlay.style.display = 'none';
+            socket.emit('challenge_action');
+        }
+        
+        function voltarParaLobby() {
+            document.getElementById('victory-screen').style.display = 'none';
+            socket.emit('voltar_lobby');
+        }
+
+        // ================= LOOP DE RENDERIZAÇÃO NO CANVAS =================
+        function gameLoop() {
+            animTime += 0.05; // Velocidade da animação (flutuação)
+            
+            // Lógica de atualização (Update)
+            gameState.players.forEach(player => {
+                if(player.isMe) {
+                    player.cards.forEach(card => {
+                        if (card.isDead) {
+                            card.flipProgress = 1; // Cartas mortas ficam sempre viradas para cima
+                            return;
+                        }
+                        
+                        // Checa se o mouse está em cima do Hitbox da carta salva no último frame
+                        let isHovering = false;
+                        if (card.hitbox) {
+                            if (mouseX >= card.hitbox.x && mouseX <= card.hitbox.x + card.hitbox.w &&
+                                mouseY >= card.hitbox.y && mouseY <= card.hitbox.y + card.hitbox.h) {
+                                isHovering = true;
+                            }
+                        }
+
+                        // Animação suave do Flip 3D (flipProgress varia de 0 a 1)
+                        const flipSpeed = 0.1;
+                        if (isHovering && card.flipProgress < 1) {
+                            card.flipProgress = Math.min(1, card.flipProgress + flipSpeed);
+                        } else if (!isHovering && card.flipProgress > 0) {
+                            card.flipProgress = Math.max(0, card.flipProgress - flipSpeed);
+                        }
+                    });
+                }
+            });
+
+            ctx.clearRect(0, 0, cw, ch);
+            
+            desenharMesa();
+            desenharBancoCentral();
+            
+            // Desenhar os jogadores com interpolação de movimento
+            gameState.players.forEach((player, index) => {
+                let targetPos = calcularPosicaoMesa(index, gameState.players.length, player.isMe);
+                if (player.x === undefined || player.y === undefined) {
+                    player.x = targetPos.x;
+                    player.y = targetPos.y;
+                } else {
+                    player.x += (targetPos.x - player.x) * 0.1;
+                    player.y += (targetPos.y - player.y) * 0.1;
+                }
+                desenharJogador(player, player.x, player.y);
+            });
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ================= FUNÇÕES DE DESENHO (DRAW) =================
+
+        function desenharMesa() {
+            ctx.save();
+            const centerX = cw / 2;
+            const centerY = ch / 2 - 20; // Levemente acima do centro
+            const rx = Math.min(cw * 0.4, 600); // Raio horizontal
+            const ry = Math.min(ch * 0.35, 400); // Raio vertical
+
+            // Borda externa escura (Mogno)
+            ctx.beginPath();
+            ctx.ellipse(centerX, centerY, rx + 20, ry + 20, 0, 0, 2 * Math.PI);
+            ctx.fillStyle = '#1a0b05'; // Madeira escura
+            ctx.fill();
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = '#000';
+            ctx.stroke();
+
+            // Interior da mesa (Feltro com gradiente)
+            const grad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, rx);
+            grad.addColorStop(0, '#3e1b0c'); // Centro levemente mais claro
+            grad.addColorStop(1, '#200e06'); // Bordas escuras
+            
+            ctx.beginPath();
+            ctx.ellipse(centerX, centerY, rx, ry, 0, 0, 2 * Math.PI);
+            ctx.fillStyle = grad;
+            ctx.fill();
+            
+            // Linha dourada interna para estética de cassino
+            ctx.beginPath();
+            ctx.ellipse(centerX, centerY, rx - 30, ry - 30, 0, 0, 2 * Math.PI);
+            ctx.strokeStyle = 'rgba(212, 175, 55, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            desenharBaralho(centerX, centerY);
+            ctx.restore();
+        }
+
+        function desenharBaralho(cx, cy) {
+            ctx.save();
+            const bcx = cx - 50; 
+            const bcy = cy - 20;
+
+            // Desenha um baralho estilizado empilhado Art Déco
+            for (let i = 0; i < 5; i++) {
+                const offsetX = i * -1.5;
+                const offsetY = i * -1.5;
+                ctx.fillStyle = '#111';
+                ctx.beginPath();
+                ctx.roundRect(bcx + offsetX - 20, bcy + offsetY - 30, 40, 60, 3);
+                ctx.fill();
+                ctx.strokeStyle = '#d4af37';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Padrão de losango e borda
+                if (i === 4) {
+                    ctx.strokeStyle = 'rgba(212, 175, 55, 0.4)';
+                    ctx.beginPath();
+                    ctx.roundRect(bcx + offsetX - 15, bcy + offsetY - 25, 30, 50, 2);
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
+
+        function desenharBancoCentral() {
+            ctx.save();
+            const cx = cw / 2 + 50;
+            const cy = ch / 2 - 10;
+            
+            // Desenhar pilha de moedas em formato 3D pseudo-isométrico
+            for(let i=0; i < gameState.centralCoins; i++) {
+                let layer = Math.floor(i / 5);
+                let posInLayer = i % 5;
+                let offsetX = (posInLayer * 12) - 24 + (layer * 6);
+                let offsetY = (layer * -6) + (Math.sin(i)*3); 
+                desenharMoeda(cx + offsetX, cy + offsetY);
+            }
+            ctx.restore();
+        }
+
+        function calcularPosicaoMesa(index, totalPlayers, isMe) {
+            // Se for eu, subimos um pouco a posição base para acomodar as cartas gigantes
+            if(isMe) return { x: cw / 2, y: ch - 140 };
+            
+            const myIndex = gameState.players.findIndex(p => p.isMe);
+            let relIndex = (index - myIndex + totalPlayers) % totalPlayers;
+            
+            const otherPlayers = totalPlayers - 1;
+            if (otherPlayers <= 0) return { x: cw/2, y: ch/2 };
+
+            const startAngle = Math.PI * 0.85;
+            const endAngle = Math.PI * 0.15;
+            
+            let angle = Math.PI / 2;
+            if (otherPlayers > 1) {
+                const t = (relIndex - 1) / (otherPlayers - 1);
+                angle = startAngle + t * (endAngle - startAngle);
+            }
+            
+            const rx = Math.min(cw * 0.4, 500);
+            const ry = Math.min(ch * 0.35, 300);
+            const cx = cw / 2;
+            const cy = ch / 2 - 20;
+
+            return {
+                x: cx + Math.cos(angle) * rx,
+                y: cy - Math.sin(angle) * ry
+            };
+        }
+
+        function desenharJogador(player, x, y) {
+            ctx.save();
+            
+            // Animação de "Respiração/Flutuação" leve
+            const floatOffset = Math.sin(animTime + (x * y)) * 5; 
+            const finalY = y + floatOffset;
+
+            // 1. O Avatar (Apenas se NÃO for o meu jogador)
+            if (!player.isMe) {
+                desenharAvatarMafia(x, finalY - 40, player.isMe);
+            }
+
+            // 2. Caixa de Nome (Reposicionada para o jogador local)
+            let nameYOffset = player.isMe ? -60 : 10;
+            
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            ctx.strokeStyle = '#d4af37';
+            ctx.lineWidth = 1;
+            const textWidth = ctx.measureText(player.name).width;
+            const boxWidth = Math.max(100, textWidth + 30);
+            
+            ctx.beginPath();
+            ctx.roundRect(x - boxWidth/2, finalY + nameYOffset, boxWidth, 25, 5);
+            ctx.fill(); ctx.stroke();
+
+            ctx.fillStyle = '#fdf5e6';
+            ctx.font = '14px Playfair Display';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(player.name, x, finalY + nameYOffset + 13);
+
+            // 3. Cartas (Gigantes e centralizadas para o jogador local)
+            let cardGap = player.isMe ? 90 : 35; 
+            let cardsYOffset = player.isMe ? -20 : 45;
+            let startXCards = x - ((player.cards.length - 1) * cardGap) / 2;
+
+            player.cards.forEach((card, i) => {
+                desenharCarta(startXCards + (i * cardGap), finalY + cardsYOffset, card, player.isMe);
+            });
+
+            // 4. Moedas do Jogador
+            let coinsYOffset = player.isMe ? 120 : 110;
+            for(let i = 0; i < player.coins; i++) {
+                desenharMoeda(x - (player.coins * 8) + (i * 16), finalY + coinsYOffset);
+            }
+
+            ctx.restore();
+        }
+
+        function desenharAvatarMafia(x, y, isMe) {
+            ctx.save();
+            // Cor muda se for eu
+            const color = isMe ? '#d4af37' : '#888';
+            
+            // Cabeça (Circulo)
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.fillStyle = '#111';
+            ctx.fill();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Aba do chapéu (Elipse)
+            ctx.beginPath();
+            ctx.ellipse(x, y - 5, 30, 8, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#222';
+            ctx.fill();
+            ctx.stroke();
+
+            // Topo do chapéu
+            ctx.beginPath();
+            ctx.arc(x, y - 10, 15, Math.PI, 0); // Meio círculo
+            ctx.fillStyle = '#222';
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function desenharCarta(x, y, card, isMe) {
+            ctx.save();
+            // Tamanhos dinâmicos: gigantes para você, pequenas para os oponentes
+            const cWidth = isMe ? 80 : 30;
+            const cHeight = isMe ? 120 : 45;
+            
+            // Ajuste do centro para facilitar a rotação e salvar a Hitbox (Área de clique/hover)
+            const drawX = x - cWidth / 2;
+
+            if (isMe && !card.isDead) {
+                card.hitbox = { x: drawX, y: y, w: cWidth, h: cHeight };
+            }
+
+            // Translação para o eixo central da carta (para girar no próprio eixo)
+            ctx.translate(x, y + cHeight / 2);
+
+            // Matemática do Flip 3D (Escala no eixo X vai de 1 a -1 usando cosseno)
+            let currentFlip = card.isDead ? 1 : (card.flipProgress || 0);
+            let scaleX = Math.cos(currentFlip * Math.PI);
+            let isFront = scaleX < 0; // Se o cosseno ficou negativo, passou do meio, então é a Frente!
+            
+            ctx.scale(Math.abs(scaleX), 1);
+            
+            // Volta a posição para desenhar
+            ctx.translate(-cWidth / 2, -cHeight / 2);
+
+            // Sombra (some durante o giro para não criar artefatos visuais estranhos)
+            if (Math.abs(scaleX) > 0.3) {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(isMe ? 4 : 2, isMe ? 4 : 2, cWidth, cHeight);
+            }
+
+            if (isFront || card.isDead) {
+                // =============== FACE DA CARTA (REVELADA) ===============
+                ctx.fillStyle = card.isDead ? '#444' : '#fdf5e6'; // Fica cinza se estiver morta
+                ctx.beginPath();
+                ctx.roundRect(0, 0, cWidth, cHeight, isMe ? 6 : 3);
+                ctx.fill();
+                ctx.strokeStyle = card.isDead ? '#222' : '#8a0303'; // Borda vermelha sangue
+                ctx.lineWidth = isMe ? 3 : 2;
+                ctx.stroke();
+
+                // Borda interna clássica
+                ctx.strokeStyle = card.isDead ? '#333' : 'rgba(138, 3, 3, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.roundRect(isMe ? 5 : 3, isMe ? 5 : 3, cWidth - (isMe ? 10 : 6), cHeight - (isMe ? 10 : 6), isMe ? 4 : 2);
+                ctx.stroke();
+
+                ctx.fillStyle = card.isDead ? '#222' : '#1a0b05';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // IMPORTANTE: Como espelhamos o eixo X (-1) para o efeito 3D, 
+                // temos que espelhar o texto de volta para ele não ficar escrito de trás pra frente!
+                ctx.save();
+                ctx.translate(cWidth/2, cHeight/2);
+                if (scaleX < 0) ctx.scale(-1, 1); 
+                
+                if (isMe) {
+                    ctx.font = 'bold 12px Playfair Display';
+                    ctx.fillText(card.role ? card.role.toUpperCase() : '?', 0, 25);
+                    
+                    let icon = "❓";
+                    if (card.role === "Agiota") icon = "💰";
+                    if (card.role === "Matador") icon = "🔪";
+                    if (card.role === "Segurança") icon = "🛡️";
+                    ctx.font = '28px Arial';
+                    ctx.fillText(icon, 0, -10);
+                } else {
+                    ctx.font = 'bold 16px Playfair Display';
+                    ctx.fillText(card.role ? card.role.charAt(0).toUpperCase() : '?', 0, 0);
+                }
+                ctx.restore();
+
+                // Marca da Morte (Um grande X de sangue)
+                if (card.isDead) {
+                    ctx.strokeStyle = 'rgba(200, 0, 0, 0.7)';
+                    ctx.lineWidth = isMe ? 5 : 3;
+                    ctx.beginPath();
+                    ctx.moveTo(isMe ? 10 : 5, isMe ? 10 : 5); ctx.lineTo(cWidth - (isMe ? 10 : 5), cHeight - (isMe ? 10 : 5));
+                    ctx.moveTo(cWidth - (isMe ? 10 : 5), isMe ? 10 : 5); ctx.lineTo(isMe ? 10 : 5, cHeight - (isMe ? 10 : 5));
+                    ctx.stroke();
+                }
+
+            } else {
+                // =============== COSTAS DA CARTA (OCULTA) ===============
+                ctx.fillStyle = '#111';
+                ctx.beginPath();
+                ctx.roundRect(0, 0, cWidth, cHeight, isMe ? 6 : 3);
+                ctx.fill();
+                ctx.strokeStyle = '#d4af37';
+                ctx.lineWidth = isMe ? 2 : 1;
+                ctx.stroke();
+
+                // Detalhe das costas
+                ctx.strokeStyle = 'rgba(212, 175, 55, 0.4)';
+                ctx.beginPath();
+                ctx.roundRect(isMe ? 5 : 3, isMe ? 5 : 3, cWidth - (isMe ? 10 : 6), cHeight - (isMe ? 10 : 6), isMe ? 4 : 2);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function desenharMoeda(x, y) {
+            ctx.save();
+            // Sombra e base 3D
+            ctx.beginPath();
+            ctx.arc(x, y + 2, 8, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(x, y + 1, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#a67c00'; // Ouro escuro (lateral)
+            ctx.fill();
+
+            // Face da moeda (Gradiente)
+            const radGrad = ctx.createRadialGradient(x-2, y-2, 1, x, y, 8);
+            radGrad.addColorStop(0, '#ffe58f'); // Brilho
+            radGrad.addColorStop(1, '#d4af37'); // Base dourada
+
+            ctx.beginPath();
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.fillStyle = radGrad;
+            ctx.fill();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#5a4300';
+            ctx.stroke();
+            ctx.restore();
+        }
+
+    </script>
+</body>
+</html>
