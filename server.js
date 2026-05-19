@@ -17,7 +17,7 @@ app.get("/ping", (req, res) => {
 });
 
 // Rota de Segurança: Força o envio do jogo em qualquer situação
-app.get("*", (req, res) => {
+app.get("/{*splat}", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
